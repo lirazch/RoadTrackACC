@@ -36,8 +36,11 @@ def get_pred_features(shift=False, moved=False, peaks=False, std=False, vert=Fal
     return features
 
 def get_category(sheet_name):
+    # TODO: use a key file
     if 'bump' in sheet_name.lower():
         return 4
+    elif 'tow' in sheet_name.lower():
+        return 6
     elif 'reg' in sheet_name.lower() or 'stan' in sheet_name.lower():
         return 0
     elif 'zig' in sheet_name.lower():
@@ -53,7 +56,8 @@ class DataLoader:
         self.files = glob.glob(path+'*.xlsx')
 
     def load_data(self, files):
-        # load data from excel files
+        # load data from excel files.
+        # input: list of files (glob can be used)
 
         df_list = []
         big_df = pd.DataFrame()
@@ -82,10 +86,12 @@ class DataLoader:
 
                 big_df = big_df.append(df)  # put it all in big_df
                 df_list.append(df)
+                df.resample('s').mean().plot(title=name + ',' + file_id + ',' + str(get_category(name)),
+                                             figsize=(16, 4))
 
         big_df['time_sec'] = big_df.index.round('s')  # add rounded second column
         big_df = big_df.dropna()
-        self.bif_df =  big_df
+        self.big_df =  big_df
 
     def load_bumper_annotations(self, file, bumper_offset=10):
         # annotations are bumpers and hard stops, and later towings

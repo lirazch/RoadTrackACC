@@ -45,7 +45,7 @@ class Modeler:
         base_estimator = DecisionTreeClassifier(max_depth=4, random_state=0)
         ada = AdaBoostClassifier(n_estimators=10, random_state=0)
         rf = RandomForestClassifier(n_estimators=50, max_depth=10, oob_score=True, random_state=1)
-        
+
     def try_models(self, model_names=['lr','svc', 'mlp', 'random forest', 'ada', 'extra tree']):
 
         models = [lr, svc, mlp, rf, ada, et]
