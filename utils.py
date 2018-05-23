@@ -3,8 +3,14 @@ import numpy as np
 import glob
 from sklearn_porter import Porter
 import datetime
-
+import json
+import codecs
+import itertools
 # data flow 1
+
+import os, sys
+ROOT_DIR = os.path.abspath("../")
+sys.path.append(ROOT_DIR)
 
 def grid_search():
     # https://github.com/nok/sklearn-porter
@@ -35,7 +41,25 @@ def get_pred_features(shift=False, moved=False, peaks=False, std=False, vert=Fal
 
     return features
 
+def get_category_from_file(file_name, sheet_name):
+    config = json.load(codecs.open(ROOT_DIR+'/config.json', 'r', 'utf-8-sig'))
+    key_df = pd.read_csv(config['experiment_key_file'])
+    if '/' in file_name:
+        file_name = file_name.split('/')[-1]
+    print(file_name, sheet_name)
+    try:
+
+        category_name = key_df[(key_df.file_name==file_name) & (key_df.sheet_name==sheet_name)].event_type.values[0]
+        print(category_name)
+        category_dict ={'Driving':0, 'Hard stop':5, 'Zigzag':2, 'Bumper':4, 'Dirty Road':3, 'Tow':6, 'Standstill':1}
+        return category_dict[category_name]
+    except:
+        print('error in sheet above')
+        return -1
+
+
 def get_category(sheet_name):
+    #using text heuristics
     # TODO: use a key file
     if 'bump' in sheet_name.lower():
         return 4
@@ -54,6 +78,7 @@ class DataLoader:
     def __init__(self):
         path = '/home/gidi/nbs/RoadTrackACC/data/'
         self.files = glob.glob(path+'*.xlsx')
+        self.big_df = ''
 
     def load_data(self, files):
         # load data from excel files.
@@ -77,16 +102,17 @@ class DataLoader:
                 df.columns = [column.replace(' ', '') for column in df.columns]
                 df[numeric_features] = df[numeric_features].apply(pd.to_numeric, errors='coerce')
                 df = df[features]  #
-                df.Vertical = df.Vertical + 240  # normalize" weritcal Axis
+                df.Vertical = df.Vertical + 240  # normalize veritcal Axis
 
                 df = df.set_index(pd.to_datetime(df['level_0'].str.replace(']', '')))  # add more columns
                 df['file'] = file_id
                 df['sheet'] = name
-                df['cat_id'] = get_category(name)
+
+                df['cat_id'] = get_category_from_file(file_id, name)
 
                 big_df = big_df.append(df)  # put it all in big_df
                 df_list.append(df)
-                df.resample('s').mean().plot(title=name + ',' + file_id + ',' + str(get_category(name)),
+                df.resample('s').mean()[['Forward','Radial','Vertical','Speed']].plot(title=name + ',' + file_id + ',' + str(get_category(name)),
                                              figsize=(16, 4))
 
         big_df['time_sec'] = big_df.index.round('s')  # add rounded second column
