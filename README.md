@@ -28,6 +28,7 @@ using libraries:
 1. Data Files - in google drive, excel format
 2. Annotation File
 3. Log file - for organized load of data
+4. categories: 0 - driving, 1 - stand-still, 2- zigzag, 3 - dirt road, 4 - bumper, 5 - hard stop, 6 - tow 
 ## Notebooks
 1. Main notebook - experiments
 2. NewAnnotationFormat
