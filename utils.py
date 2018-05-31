@@ -12,6 +12,15 @@ import os, sys
 ROOT_DIR = os.path.abspath("../")
 sys.path.append(ROOT_DIR)
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 # https://github.com/nok/sklearn-porter
 def port_model(model, name="rf_from_sklearn.cpp"):
@@ -22,7 +31,7 @@ def port_model(model, name="rf_from_sklearn.cpp"):
         text_file.write(output)
 
     statinfo = os.stat(name)
-    print('model size in bytes is: ', statinfo.st_size)
+    print(bcolors.OKBLUE+'model size in bytes is: '+bcolors.ENDC, statinfo.st_size)
 
 # data flow 2
 
@@ -46,7 +55,6 @@ def get_pred_features(shift=False, moved=False, peaks=False, std=False, vert=Fal
     return features
 
 
-
 def get_category(sheet_name):
     #using text heuristics
     # TODO: use a key file
@@ -68,6 +76,7 @@ def get_category(sheet_name):
 ####################
 
 class DataLoader:
+
     def __init__(self):
         config = json.load(codecs.open('config.json', 'r', 'utf-8-sig'))
         path = '/home/gidi/nbs/RoadTrackACC/data/'
@@ -76,48 +85,59 @@ class DataLoader:
         self.key_df = pd.read_csv(config['experiment_key_file'])
         self.anot = pd.read_csv(config['annotation_file'])
 
-    def load_data(self, files, test=0):
-        # load data from excel files.
-        # input: list of files (glob can be used)
-        # if test=1, no more than 3 sheets are loaded per file, to gain speed
+    def load_data(self, files, source, test=False, plot=False):
+    #
+    # load data from excel files.
+    # input: list of files (glob can be used)
+    # if test=1, no more than 3 sheets are loaded per file, to gain speed
+        if source=='Excel':
+            df_list = []
+            big_df = pd.DataFrame()
 
-        df_list = []
-        big_df = pd.DataFrame()
+            for file_id in files:
+                print(bcolors.OKBLUE+'Loading file:'+str(file_id)+bcolors.ENDC)
 
-        for file_id in files:
-            print([file_id])
+                excel = pd.ExcelFile(file_id)
+                hz = 50 if file_id != 1 else 100
 
-            excel = pd.ExcelFile(file_id)
-            hz = 50 if file_id != 1 else 100
+                features = ['Vertical', 'Forward', 'Radial', 'Speed', 'Ignition', 'level_0']
+                numeric_features = ['Vertical', 'Forward', 'Speed', 'Radial']
 
-            features = ['Vertical', 'Forward', 'Radial', 'Speed', 'Ignition', 'level_0']
-            numeric_features = ['Vertical', 'Forward', 'Speed', 'Radial']
+                for i, name in enumerate(excel.sheet_names):
+                    df = excel.parse(name, header=1)
+                    df = df.reset_index()
+                    df.columns = [column.replace(' ', '') for column in df.columns]
+                    df[numeric_features] = df[numeric_features].apply(pd.to_numeric, errors='coerce')
+                    df = df[features]  #
+                    df.Vertical = df.Vertical + 240  # normalize veritcal Axis
 
-            for i, name in enumerate(excel.sheet_names):
-                df = excel.parse(name, header=1)
-                df = df.reset_index()
-                df.columns = [column.replace(' ', '') for column in df.columns]
-                df[numeric_features] = df[numeric_features].apply(pd.to_numeric, errors='coerce')
-                df = df[features]  #
-                df.Vertical = df.Vertical + 240  # normalize veritcal Axis
+                    df = df.set_index(pd.to_datetime(df['level_0'].str.replace(']', '')))  # add more columns
+                    df['file'] = file_id.split('/')[-1]
+                    df['sheet'] = name
 
-                df = df.set_index(pd.to_datetime(df['level_0'].str.replace(']', '')))  # add more columns
-                df['file'] = file_id.split('/')[-1]
-                df['sheet'] = name
+                    df['cat_id'] = self.get_category_from_file(file_id, name)
 
-                df['cat_id'] = self.get_category_from_file(file_id, name)
+                    big_df = big_df.append(df)  # put it all in big_df
+                    df_list.append(df)
 
-                big_df = big_df.append(df)  # put it all in big_df
-                df_list.append(df)
-                df.resample('s').mean()[['Forward', 'Radial', 'Vertical', 'Speed']].plot(title=name + ',' + file_id + ',' + str(get_category(name)),
-                                             figsize=(16, 4))
-                if test==1 and i>3:
-                    print('break loader because test is 1')
-                    break
+                    if plot:
+                        df.resample('s').mean()[['Forward', 'Radial', 'Vertical', 'Speed']]\
+                            .plot(title=name + ',' + file_id + ',' + str(get_category(name)), figsize=(16, 4))
+                    if test==1 and i>3:
+                        print(bcolors.OKBLUE+'break loader because test is 1'+bcolors.ENDC)
+                        break
 
-        big_df['time_sec'] = big_df.index.round('s')  # add rounded second column
-        big_df = big_df.dropna()
-        self.big_df =  big_df
+            big_df['time_sec'] = big_df.index.round('s')  # add rounded second column
+            self.big_df = big_df.dropna()
+
+        elif source == 'saved':
+            #
+            # Load a saved big_df
+            #
+            self.big_df = pd.read_csv('temp_big_df.csv')
+            self.big_df.index = self.big_df.level_0
+            print(bcolors.OKBLUE + 'Loading temp_big_df file:' + bcolors.ENDC)
+
 
     def get_category_from_file(self, file_name, sheet_name):
 
@@ -125,44 +145,12 @@ class DataLoader:
             file_name = file_name.split('/')[-1]
         print(file_name, sheet_name)
         try:
-            category_name =  self.key_df[(self.key_df.file_name == file_name) & (self.key_df.sheet_name == sheet_name)].event_type.values[0]
+            category_name = self.key_df[(self.key_df.file_name == file_name) & (self.key_df.sheet_name == sheet_name)].event_type.values[0]
             category_dict = {'Driving': 0, 'Hard stop': 5, 'Zigzag': 2, 'Bumper': 4, 'Dirty Road': 3, 'Tow': 6, 'Standstill': 1}
             return category_dict.get(category_name, -1)
         except:
-            print('error in sheet above. Check experiment log')
+            print(bcolors.FAIL+'error in sheet above. Check experiment log'+bcolors.ENDC)
             return -1
-
-    def load_bumper_annotations(self, file, bumper_offset=10):
-        # annotations are bumpers and hard stops, and later towings
-
-        anot = pd.read_csv(file)
-
-        bumpers = anot[anot.event == 'bumper']
-        # fit date time format. first workout hard stops
-        bumpers['start time'] = pd.to_datetime(bumpers['start time'])
-        # bumpers['end time'] = pd.to_datetime(bumpers['end time'])
-
-        # offset bumpers
-        bumpers.loc[bumpers.file.isin(['Acc_Data_0205.xlsx', 'Acc_Data_0305.xlsx']), 'start time'] = \
-        bumpers.loc[bumpers.file.isin(['Acc_Data_0205.xlsx', 'Acc_Data_0305.xlsx']), 'start time'] + pd.DateOffset(seconds=10)
-
-        bumpers_list = []
-        first_second_stop = []
-        for row in bumpers.iterrows():
-            i = 0
-            time = row[1]['start time']
-            first_second_stop.append(time)
-            # while time >= row[1]['start time'] and time<=row[1]['start time']+datetime.timedelta(0,1):
-            for i in range(1, 3):
-                bumpers_list.append(time)
-                time = row[1]['start time'] + datetime.timedelta(0, i)
-                i += 1
-
-        # set bumper annotations
-        self.big_df['bumper_on'] = 0
-        self.big_df['cat_id'][(self.big_df.cat_id == 40)] = 4
-        self.big_df['bumper_on'][(self.big_df.cat_id == 4) & (self.big_df.time_sec.isin(bumpers_list))] = 1
-        self.big_df['cat_id'][(self.big_df.cat_id == 4) & (self.big_df.time_sec.isin(bumpers_list))] = 40
 
     def load_stop_annotations(self, file):
         anot = pd.read_csv(file)
@@ -191,7 +179,7 @@ class DataLoader:
             [(self.big_df['file'] == 'Acc_Test_240418.xlsx') & (self.big_df.cat_id == 5) & (
             self.big_df.time_sec.isin(first_second_stop))] = 2
 
-    def extract_features(self, bumpers=False, hard_stops=False):
+    def extract_features(self, bumpers=False, hard_stops=False, moved=False, shifted=False):
         # handle the bumper and hardstop thing
 
         print('extracting features - grouping big_df into research_dfa file')
@@ -202,10 +190,12 @@ class DataLoader:
             .join(self.big_df.groupby('time_sec')[features].min(), rsuffix='_min') \
             .join(self.big_df.groupby('time_sec')['cat_id'].max())
         if bumpers:
-            self.research_dfa=self.research_dfa.join(self.big_df.groupby('time_sec')['bumper_on'].max())
+            self.research_dfa = self.research_dfa.join(self.big_df.groupby('time_sec')['bumper_on'].max())
         if hard_stops:
             self.research_dfa = self.research_dfa.join(self.big_df.groupby('time_sec')['hard_stop_on'].max())
-
+        if shifted or moved:
+            self.research_dfa = self.research_dfa.join(self.research_dfa.shift(-1), rsuffix='_shifted')\
+                .join(self.research_dfa.shift(1), rsuffix='_moved')
         self.research_dfa = self.research_dfa.fillna(0)
 
     def shift_dataset(self):
@@ -217,48 +207,98 @@ class DataLoader:
         # build datset of continues features
         self.research_dfb = self.research_dfa[self.research_dfa.cat_id < 4]
 
-    def populate_events(self):
-        self.events = self.anot[(self.anot.event == 'tow') & (self.anot.file == 'Acc_Data_Tow_1605')]
-        # fit date time format. first workout hard stops
-        self.events['start time'] = pd.to_datetime(self.events['start time'])
-        self.events['end time'] = pd.to_datetime(self.events['end time'])
+    def populate_bumpers(self):
+        self.events_bumper = self.anot[self.anot.event == 'bumper']
 
-        self.research_dfa['towing'] = 0
+        self.events_bumper['start time'] = pd.to_datetime(self.events_bumper['start time'])
+        self.events_bumper['end time'] = pd.to_datetime(self.events_bumper['end time'])
+
+        # necessary offset
+        self.events_bumper.loc[self.events_bumper.file.isin(['Acc_Data_0205.xlsx', 'Acc_Data_0305.xlsx']), 'start time'] = \
+        self.events_bumper.loc[self.events_bumper.file.isin(['Acc_Data_0205.xlsx', 'Acc_Data_0305.xlsx']), 'start time'] + pd.DateOffset(
+                seconds=10)
+
+        # up to 3.5 - ~?
+        # up to 3.8 - ~ 154
+        self.bumpers_list = []
+        first_second_stop = []
+        for row in self.events_bumper.iterrows():
+            i = 0
+            time = row[1]['start time']
+            first_second_stop.append(time)
+            # while time >= row[1]['start time'] and time<=row[1]['start time']+datetime.timedelta(0,1):
+            for i in range(1, 3):
+                self.bumpers_list.append(time)
+                time = row[1]['start time'] + datetime.timedelta(0, i)
+                i += 1
+
+        # set bumper annotations
+        self.big_df['bumper_on'] = 0
+        self.big_df['cat_id'][(self.big_df.cat_id == 40)] = 4
+        self.big_df['bumper_on'][(self.big_df.cat_id == 4) & (self.big_df.time_sec.isin(self.bumpers_list))] = 1
+        self.big_df['cat_id'][(self.big_df.cat_id == 4) & (self.big_df.time_sec.isin(self.bumpers_list))] = 40
+        sum(self.big_df['bumper_on']), sum(self.big_df[self.big_df['cat_id'] == 40]['bumper_on'])
 
     def popluate_slight_tow(self):
+        self.events_slight_tow = self.anot[(self.anot.event == 'tow') & (self.anot.file == 'Acc_Data_Tow_1605')]
+        # fit date time format. first workout hard stops
+        self.events_slight_tow['start time'] = pd.to_datetime(self.events_slight_tow['start time'])
+        self.events_slight_tow['end time'] = pd.to_datetime(self.events_slight_tow['end time'])
+
         # add slight_tow column to research dataframe
-        for row in self.events.iterrows():
-            # print(row[1])
-            self.research_dfa['towing'][
-                (self.research_dfa.index > row[1]['start time']) & (self.research_dfa.index < row[1]['end time']) \
-                & (self.research_dfa.cat_id == 6)] = 1
-import json
-import glob
-import codecs
+        self.research_dfa['slight_towing'] = 0
+        for row in self.events_slight_tow.iterrows():
+            self.research_dfa['slight_towing'][(self.research_dfa.index.to_datetime() > row[1]['start time']) &
+                                               (self.research_dfa.index.to_datetime() < row[1]['end time']) & (
+                                                       self.research_dfa.cat_id == 6)] = 1
+
+    def populate_tow(self):
+        pass
+
+    def populate_hard_stop(self):
+        pass
+
 from algorithms import *
 import warnings
+import click
+from click import option as opt
+
 warnings.filterwarnings("ignore")
 
-if  __name__=='__main__':
+# necessary options:
+@click.command()
+@click.option('--dest', default='towing', help='standard(default, drive/dirt road/zigzag), bumpers, towing(standard towing, slight_towing)')
+@click.option('--source', default='saved', help='the .csv or the excels')
+def main(dest, source):
     # I start here with the slight tow predictor
 
     config = json.load(codecs.open('config.json', 'r', 'utf-8-sig'))
     root_dir = config['root_dir']
     f = glob.glob(root_dir + '/data/*.xlsx')
     # f=[file for file in f if 'stand' in file]
-    f = [file for file in f if 'stand' in file or 'Tow' in file]
+    # f = [file for file in f if 'stand' in file or 'Tow' in file]
 
     loader = DataLoader()
-    loader.load_data(f, test=1) # test loads fewer sheets, although all Excel file is still loadeed
-    big_df = loader.big_df
 
-    loader.extract_features()
-    loader.populate_events()
-    loader.popluate_slight_tow()
+    loader.load_data(f, source) # test loads fewer sheets, although all Excel file is still loaded
+    #loader.load_saved_data()
 
-    pred_features = get_pred_features(shift=False, moved=False)
+    loader.populate_bumpers()
+    loader.extract_features(bumpers=True, moved=True, shifted=True)
 
-    select_model(loader.research_dfa, model_names=['rf', 'ada', 'et'], features=pred_features )
+    loader.popluate_slight_tow()  # TODO: move research_dfa out of this function
+    # loader.populate_events()
 
+    pred_features = get_pred_features(shift=True, moved=True)
+
+    # possible dest: bumper_on, standard, slight_towing, towing
+    if dest == 'towing':  # t
+        mean_crossing(loader.big_df)
+    else:
+        select_model(loader.research_dfa, model_names=['rf', 'ada', 'et'], features=pred_features, dest=dest)
+
+
+if  __name__=='__main__':
+    main()
 
 
