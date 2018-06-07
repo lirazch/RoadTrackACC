@@ -20,27 +20,6 @@ import numpy as np
 from collections import Counter
 from utils import *
 
-def mean_crossing(big_df, first_level=100, second_level=10, consec_thresh=25 ,axis='Forward'):
-    # this is function return the maximum consecutive mean corssing, with 2
-    # rolling means
-    for row in big_df[['sheet' ,'file']].drop_duplicates().iterrows():
-        sheet = row[1][0]
-        file = row[1][1]
-        rolling = pd.DataFrame \
-            (big_df[(big_df.sheet == sheet ) &(big_df.file==file)][axis].rolling(first_level).mean())
-        rolling['time_sec'] = rolling.index.round('s')
-
-        grouped = rolling.groupby('time_sec').mean()
-        mean = grouped[axis].rolling(second_level).mean()
-        trend = pd.DataFrame(np.abs(grouped[axis] ) >np.abs(mean ) +1)[axis]
-        consec_decreases = trend * (trend.groupby((trend != trend.shift()).cumsum()).cumcount() + 1)
-
-        fig ,ax = plt.subplots(figsize=(18 ,4))
-        ax.plot(grouped[axis])
-        ax.set_title(sheet +' consec: ' +str(max(consec_decreases)))
-        ax.plot(mean)
-        ax.plot(trend *10)
-
 
 def init_model(type='et', params={'estimators': 5}):
     # initialize different models for model selection
@@ -63,25 +42,27 @@ def init_model(type='et', params={'estimators': 5}):
     return model
 
 
-def mean_crossing(big_df, first_level=100, second_level=10, consec_thresh=25, axis='Forward'):
+def mean_crossing(big_df, first_level=100, second_level=10, consec_thresh=25, axis='Forward', plots=False):
     # this is function return the maximum consecutive mean corssing, with 2
     # rolling means
     for row in big_df[['sheet', 'file']].drop_duplicates().iterrows():
         sheet = row[1][0]
         file = row[1][1]
         rolling = pd.DataFrame(big_df[(big_df.sheet == sheet) & (big_df.file == file)][axis].rolling(first_level).mean())
-        rolling['time_sec'] = rolling.index.round('s')
+        rolling['time_sec'] = rolling.index.to_datetime().round('s')
 
         grouped = rolling.groupby('time_sec').mean()
         mean = grouped[axis].rolling(second_level).mean()
         trend = pd.DataFrame(np.abs(grouped[axis]) > np.abs(mean) + 1)[axis]
         consec_decreases = trend * (trend.groupby((trend != trend.shift()).cumsum()).cumcount() + 1)
 
-        fig, ax = plt.subplots(figsize=(18, 4))
-        ax.plot(grouped[axis])
-        ax.set_title(sheet + ' consec:' + str(max(consec_decreases)))
-        ax.plot(mean)
-        ax.plot(trend * 10)
+        if plots:
+            fig, ax = plt.subplots(figsize=(18, 4))
+            ax.plot(grouped[axis])
+            ax.set_title(sheet + ' consec:' + str(max(consec_decreases)))
+            ax.plot(mean)
+            ax.plot(trend * 10)
+    print('mean crossing algorithm finished')
 
 
 def select_model(data, features, model_names='', dest='towing', params={'estimators': 5}):
@@ -92,9 +73,9 @@ def select_model(data, features, model_names='', dest='towing', params={'estimat
     models = [init_model(name) for name in model_names]
     print(bcolors.BOLD+f'predicting {dest} with {len(features)} feature count'+bcolors.ENDC)
 
-    if dest=='bumper_on':
+    if dest == 'bumper':
         # under/over sampling is needed
-        data = data[data.cat_id.isin([0, 1, 2, 3])].sample(int(sum(data.cat_id == 40) * 1.2)).append(data[data.bumper_on == 1])
+        data = data[data.cat_id.isin([0, 1, 2, 3])].sample(int(len(data[data['bumper'] == 1]) * 1.2)).append(data[data['bumper'] == 1])
 
     if dest == 'standard':
         data = data[data.cat_id.isin([0, 2, 3])]
@@ -115,11 +96,34 @@ def select_model(data, features, model_names='', dest='towing', params={'estimat
             score = model.score(X_val, y_val)
             results.append(score)
         try:
-            port_model(model, 'test.cpp')
+            port_model(model, f'models/{dest}_test.cpp')
         except:
             print(f'well, this model {model} is not suitable for porting')
 
         print('confusion matrix: [predXactual]:')
         print(cm(model.predict(X_val), y_val))
-        print('model','accuracy','std')
+        print('model', 'accuracy', 'std')
         print(model_names[i], round(np.mean(results), 3), round(np.std(results), 3))
+        #write_experiment_to_log(model=model_names[i],results=round(np.mean(results), 3), dest=dest)
+
+
+def write_experiment_to_log(model='', dataset_desc='', settings='', results='', dest=''):
+    # write the experiments to an experiemtn log
+    import hashlib
+    config = json.load(codecs.open('config.json', 'r', 'utf-8-sig'))
+
+    exp_df = pd.read_csv(config['experiment_log_file'], index_col=0)
+    time = datetime.datetime.now()
+    #dataset_code = hashlib.sha256(exp_df.values.tobytes()).hexdigest()
+    dataset_desc = dataset_desc
+    model = model
+    settings = settings
+    results = results
+    validity = False
+    dest = 'standard' if dest=='cat_id' else dest
+    values = [time, dataset_desc, model, settings, results,dest, validity]
+    columns = ['dt', 'dataset_code', 'dataset_desc', 'model', 'result', 'setting','dest', 'valid']
+    index = exp_df.index.max()+1 if exp_df.index.max()>=0 else 0
+    ordered_df = pd.DataFrame({col: value for col, value in zip(columns, values)}, index=[index])
+    exp_df = exp_df.append(ordered_df[columns])
+    exp_df.to_csv(config['experiment_log_file'])

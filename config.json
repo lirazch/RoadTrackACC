@@ -1,4 +1,5 @@
 {"data_folder":"/home/gidi/nbs/RoadTrackACC/data",
   "root_dir":"/home/gidi/nbs/RoadTrackACC/",
   "annotation_file":"/home/gidi/nbs/RoadTrackACC/data/Roadtrack_tags - Acc_Data_240418.csv",
-"experiment_key_file":"/home/gidi/nbs/RoadTrackACC/data/RoadTrack_Experiment_log - Acc_Data.csv"}
+"data_key_file":"/home/gidi/nbs/RoadTrackACC/data/RoadTrack_Experiment_log - Acc_Data.csv",
+"experiment_log_file":"/home/gidi/nbs/RoadTrackACC/experiment_log.csv"}
