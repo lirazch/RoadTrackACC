@@ -96,15 +96,15 @@ def select_model(data, features, model_names='', dest='towing', params={'estimat
             score = model.score(X_val, y_val)
             results.append(score)
         try:
-            port_model(model, f'models/{dest}_test.cpp')
+            port_model(model, f'models/{dest}-{model_names[i]}-test.cpp') # standard model will be saved as cat_id currenlty...
         except:
-            print(f'well, this model {model} is not suitable for porting')
+            print(f'well, this model {model}-{model_names[i]} is not suitable for porting')
 
         print('confusion matrix: [predXactual]:')
         print(cm(model.predict(X_val), y_val))
         print('model', 'accuracy', 'std')
         print(model_names[i], round(np.mean(results), 3), round(np.std(results), 3))
-        #write_experiment_to_log(model=model_names[i],results=round(np.mean(results), 3), dest=dest)
+        write_experiment_to_log(model=model_names[i], results=round(np.mean(results), 3), dest=dest)
 
 
 def write_experiment_to_log(model='', dataset_desc='', settings='', results='', dest=''):
@@ -120,9 +120,9 @@ def write_experiment_to_log(model='', dataset_desc='', settings='', results='', 
     settings = settings
     results = results
     validity = False
-    dest = 'standard' if dest=='cat_id' else dest
-    values = [time, dataset_desc, model, settings, results,dest, validity]
-    columns = ['dt', 'dataset_code', 'dataset_desc', 'model', 'result', 'setting','dest', 'valid']
+    dest = 'standard' if dest == 'cat_id' else dest
+    values = [time, dataset_desc, model, settings, results, dest, validity]
+    columns = ['dt', 'dataset_desc', 'model', 'result', 'setting','dest', 'valid']
     index = exp_df.index.max()+1 if exp_df.index.max()>=0 else 0
     ordered_df = pd.DataFrame({col: value for col, value in zip(columns, values)}, index=[index])
     exp_df = exp_df.append(ordered_df[columns])

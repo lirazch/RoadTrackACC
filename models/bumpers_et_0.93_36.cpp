@@ -4468,11 +4468,14 @@ int predict (float features[]) {
 }
 
 int main(int argc, const char * argv[]) {
-    float features[argc-1];
-    int i;
-    for (i = 1; i < argc; i++) {
-        features[i-1] = atof(argv[i]);
-    }
-    printf("%d", predict(features));
-    return 0;
+   float features[argc-1];
+   int i;
+   printf("bumper prediction, argc = %d\n",argc);
+   for (i = 1; i < argc; i++) {
+       features[i-1] = atof(argv[i]);
+   printf("%f,",features[i-1]);
+   }
+   printf("%d", predict(features));
+   getchar();
+   return 0;
 }

@@ -2,27 +2,14 @@
 
 using libraries:
   * SKlearn, extensively
-  * detect_peaks
- 
-## 23.5 models (models/x.cpp)
+  * Detect_peaks
+
+## 12.6 models (models/x.cpp)
 1. Driving model
 * Used: ignition = on
-* Input: time window of t=1 second statistics (sum, variance, max, min) of all feauters (f,v,r,s) additonally to shift forward and backward
-* Output: Standard drive, zigzag, dirt road
-* Model summary:
-* Notebook:
-2. Bumper/momentary
-* Used: ignition = on
-* Input: time window of t=1 second statistics (sum, variance, max, min) of all feauters (f,v,r,s) additonally to shift forward and backward
-* Output: none, bumper
-* Model summary:
-* Notebook: 
-3. Towing model
-* Used: ignition = off
-* Input: 3 axis streaming data
-* Output: none, towing
-* Model summary:
-* Notebook: 
+2. Bumper model
+3. Slight Towing model
+
 
 ## Data
 1. Data Files - in google drive, excel format
