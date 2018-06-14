@@ -13,8 +13,10 @@ from click import option as opt
 # data flow 1
 
 import os, sys
+import pickle
 ROOT_DIR = os.path.abspath("../")
 sys.path.append(ROOT_DIR)
+warnings.filterwarnings("ignore")
 
 class bcolors:
     HEADER = '\033[95m'
@@ -30,14 +32,22 @@ class bcolors:
 def port_model(model, name="rf_from_sklearn.cpp"):
     porter = Porter(model, language='c')
     output = porter.export(embed_data=True)
-
+    save_pickle(f'models/pkls/{dest}-{model_names[i]}-{round(score,2)}-test.pkl', model)
     with open(name, "w") as text_file:
         text_file.write(output)
 
     statinfo = os.stat(name)
-    print(bcolors.OKBLUE+'model size in bytes is: '+bcolors.ENDC, statinfo.st_size)
+    print(bcolors.OKBLUE+f'model {name} saved, with size {statinfo.st_size} in bytes: '+bcolors.ENDC)
 
 # data flow 2
+
+def save_pickle(fname, obj):
+    with open(fname, "wb") as output_file:
+        pickle.dump(obj, output_file)
+
+def load_pickle(fname):
+    with open(fname, "rb") as input_file:
+        return pickle.load(input_file)
 
 def get_pred_features(shift=False, moved=False, peaks=False, std=False, vert=False):
     base_feautres = ['Vertical', 'Radial', 'Forward', 'Speed']
@@ -57,7 +67,6 @@ def get_pred_features(shift=False, moved=False, peaks=False, std=False, vert=Fal
         features += ['speed_peaks', 'speed_valleys', 'vert_peaks', 'vert_valleys']
 
     return features
-
 
 def get_category(sheet_name):
     #using text heuristics
@@ -145,6 +154,10 @@ class DataLoader:
             self.big_df.index = self.big_df.level_0
             print(bcolors.OKBLUE + f'Loading {file_name} file:' + bcolors.ENDC)
 
+        for column in self.big_df.columns:  # clear the level_0 column
+            if 'level' in column:
+                del self.big_df[column]
+
     def get_category_from_file(self, file_name, sheet_name):
 
         if '/' in file_name:
@@ -214,36 +227,35 @@ class DataLoader:
         # build datset of continues features
         self.research_dfb = self.research_dfa[self.research_dfa.cat_id < 4]
 
-    def populate_bumpers(self):
-        self.events_bumper = self.anot[self.anot.event == 'bumper']
-
-        self.events_bumper['start time'] = pd.to_datetime(self.events_bumper['start time'])
-        self.events_bumper['end time'] = pd.to_datetime(self.events_bumper['end time'])
-
-        # necessary offset
-        self.events_bumper.loc[self.events_bumper.file.isin(['Acc_Data_0205.xlsx', 'Acc_Data_0305.xlsx']), 'start time'] = \
-        self.events_bumper.loc[self.events_bumper.file.isin(['Acc_Data_0205.xlsx', 'Acc_Data_0305.xlsx']), 'start time'] + pd.DateOffset(
-                seconds=10)
-
-        #self.events_bumper['start time']=self.events_bumper['start time'].dt.time
-        # up to 3.5 - ~?
-        # up to 3.8 - ~ 154
-        self.bumpers_list = []
-        self.big_df['bumpers'] = 0
-        for row in self.events_bumper.iterrows():
-            time = row[1]['start time']
-            sheet = row[1]['sheet']
-            file = row[1]['file']
-            self.bumpers_list.append(time)
-            for i in range(1, 3):
-                self.bumpers_list.append(time)
-                time = row[1]['start time'] + datetime.timedelta(0, i)
-                i += 1
-
-        # set bumper annotations
-
-        self.big_df['bumpers'][(self.big_df.cat_id == 4) & (self.big_df.sheet == sheet)& (self.big_df.file == file) &
-                               (self.big_df.time_sec.isin(self.bumpers_list))] = 1
+    # def populate_bumpers(self):
+    #     self.events_bumper = self.anot[self.anot.event == 'bumper']
+    #
+    #     self.events_bumper['start time'] = pd.to_datetime(self.events_bumper['start time'])
+    #     self.events_bumper['end time'] = pd.to_datetime(self.events_bumper['end time'])
+    #
+    #     # necessary offset
+    #     self.events_bumper.loc[self.events_bumper.file.isin(['Acc_Data_0205.xlsx', 'Acc_Data_0305.xlsx']), 'start time'] = \
+    #     self.events_bumper.loc[self.events_bumper.file.isin(['Acc_Data_0205.xlsx', 'Acc_Data_0305.xlsx']), 'start time'] + pd.DateOffset(
+    #             seconds=10)
+    #
+    #     #self.events_bumper['start time']=self.events_bumper['start time'].dt.time
+    #     # up to 3.5 - ~?
+    #     # up to 3.8 - ~ 154
+    #     self.bumpers_list = []
+    #     self.big_df['bumpers'] = 0
+    #     for row in self.events_bumper.iterrows():
+    #         time = row[1]['start time']
+    #         sheet = row[1]['sheet']
+    #         file = row[1]['file']
+    #         self.bumpers_list.append(time)
+    #         for i in range(1, 3):
+    #             self.bumpers_list.append(time)
+    #             time = row[1]['start time'] + datetime.timedelta(0, i)
+    #             i += 1
+    #
+    #     # set bumper annotations
+    #
+    #     self.big_df['bumpers'][(self.big_df.cat_id == 4) & (self.big_df.sheet == sheet)& (self.big_df.file == file) & (self.big_df.time_sec.isin(self.bumpers_list))] = 1
 
     def popluate_slight_tow(self):
         # populate slight towing. this can't be done in the standard event population because it uses the research dfa
@@ -255,10 +267,11 @@ class DataLoader:
 
         # add slight_tow column to research dataframe
         self.research_dfa[event] = 0
+        dfa_times = self.research_dfa.index.get_level_values('time_sec').to_datetime()  # self.research_dfa.index.to_datetime()
         for row in self.events_slight_tow.iterrows():
             # very slow :(( sometimes
             tow_time = row[1]
-            dfa_times = self.research_dfa.index.get_level_values('time_sec').to_datetime() #self.research_dfa.index.to_datetime()
+
             self.research_dfa[event][(dfa_times > tow_time['start time']) &(dfa_times < tow_time['end time']) & (self.research_dfa.cat_id == 6)] = 1
         print(f'{event} count {Counter(self.research_dfa[event])}')
 
@@ -276,30 +289,31 @@ class DataLoader:
 
         event_list = []
         first_second_stop = []
+
         for row in events.iterrows():
             i = 0
             time = row[1]['start time']
             first_second_stop.append(time)
+
             while time >= row[1]['start time'] and time <= row[1]['end time']:
                 event_list.append(time)
                 time = row[1]['start time'] + datetime.timedelta(0, i)
                 i += 1
 
         self.big_df[event] = 0
+        df_times = pd.to_datetime(self.big_df.time_sec)  # self.research_dfa.index.to_datetime()
         print(f'populating {event} events')
         for row in events.iterrows(): # might be a bit slow
-            self.big_df[event][(self.big_df.cat_id == cat_id) & (self.big_df.time_sec >= row[1]['start time']) & (
-                        self.big_df.time_sec <= row[1]['end time']) & (self.big_df.file == row[1]['file'])] = 1
+            self.big_df[event][(self.big_df.cat_id == cat_id) & (df_times >= row[1]['start time']) & (
+                    df_times <= row[1]['end time']) & (self.big_df.file == row[1]['file'])] = 1
         print(f'{event} count {Counter(self.big_df[event])}')
-
-
-
-warnings.filterwarnings("ignore")
 
 # necessary options:
 @click.command()
 @click.option('--dest', default='bumper', help='standard(default, drive/dirt road/zigzag), bumper, towing(standard towing,).slight_towing')
-@click.option('--source', default='excel', help='the .csv or the excels')  #saved, excel
+@click.option('--source', default='saved', help='the .csv or the excels')  #saved, excel
+
+# TODO: pay attention, saved dataset is curenlty valid for 1 day, since it is populated with current date
 def main(dest, source):
     # I start here with the slight tow predictor
     # instructions:
@@ -316,26 +330,30 @@ def main(dest, source):
     loader.load_data(f, source)  # test loads fewer sheets, although all Excel file is still loaded
     # files for (slight) towing 'data/Acc_Data_Tow_1605.xlsx', 'data/standStillDownHill.xlsx', 'data/standStillFlat.xlsx', 'data/standStillUphill.xlsx','data/Acc_Data_060618.xlsx'
     # files for driving
-    loader.big_df.to_csv(f'big_df_{dest}.csv')
+
+     #TODO:  consider saving after adding events
+
     if dest == 'bumper':
         loader.populate_events('bumper', 4)
 
+    loader.big_df.to_csv(f'saved_data/big_df_{dest}.csv')
     bumper_state = True if dest=='bumper' else False
     loader.extract_features(bumpers=bumper_state, moved=True, shifted=True)
 
     if dest == 'slight_towing':
         loader.popluate_slight_tow()  # TODO: move research_dfa out of this function
-    # loader.populate_events()
 
     pred_features = get_pred_features(shift=True, moved=True)
 
     print(f'data distribution {Counter(loader.research_dfa.cat_id)}')
 
     #print(f'dest distribution {Counter(loader.research_dfa[dest])}')
-    # possible dest: bumper_on, standard, slight_towing, towing
+    # possible dest: bumper_, standard, slight_towing, towing
     if dest == 'towing':  # t
         print('Running towing algorithms')
         mean_crossing(loader.big_df)
+    elif dest in ['bumper','hard_stop']:
+        select_model_imbalanced(loader.research_dfa, model_names=['rf', 'ada', 'et'], features=pred_features, dest=dest)
     else:
         select_model(loader.research_dfa, model_names=['rf', 'ada', 'et'], features=pred_features, dest=dest)
 
