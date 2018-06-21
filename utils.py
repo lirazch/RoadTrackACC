@@ -29,10 +29,10 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 # https://github.com/nok/sklearn-porter
-def port_model(model, name="rf_from_sklearn.cpp"):
+def port_model(model, name="rf_from_sklearn"):
     porter = Porter(model, language='c')
     output = porter.export(embed_data=True)
-    save_pickle(f'models/pkls/{dest}-{model_names[i]}-{round(score,2)}-test.pkl', model)
+
     with open(name, "w") as text_file:
         text_file.write(output)
 
@@ -149,9 +149,13 @@ class DataLoader:
             #
             # Load a saved big_df
             #
-            file_name=f'big_df_{self.dest}.csv'
+            file_name = f'big_df_{self.dest}.csv'
+            today = pd.datetime.today().date()
             self.big_df = pd.read_csv('saved_data/'+file_name)
+            self.big_df.level_0 = pd.to_datetime(self.big_df.level_0)
+            self.big_df.level_0 = self.big_df.level_0.apply(lambda x: (x - (x.date() - today)))
             self.big_df.index = self.big_df.level_0
+            self.big_df['time_sec'] = pd.to_datetime(self.big_df.index.round('s'))
             print(bcolors.OKBLUE + f'Loading {file_name} file:' + bcolors.ENDC)
 
         for column in self.big_df.columns:  # clear the level_0 column
@@ -309,12 +313,12 @@ class DataLoader:
         print(f'{event} count {Counter(self.big_df[event])}')
 
 # necessary options:
-@click.command()
-@click.option('--dest', default='bumper', help='standard(default, drive/dirt road/zigzag), bumper, towing(standard towing,).slight_towing')
-@click.option('--source', default='saved', help='the .csv or the excels')  #saved, excel
+#@click.command()
+#@click.option('--dest', default='bumper', help='standard(default, drive/dirt road/zigzag), bumper, towing(standard towing,).slight_towing')
+#@click.option('--source', default='saved', help='the .csv or the excels')  #saved, excel
 
 # TODO: pay attention, saved dataset is curenlty valid for 1 day, since it is populated with current date
-def main(dest, source):
+def main(dest='slight_towing', source='saved'):
     # I start here with the slight tow predictor
     # instructions:
     # when predicting slight towing, need to supply files with (slight) towing, and standstill
@@ -352,7 +356,7 @@ def main(dest, source):
     if dest == 'towing':  # t
         print('Running towing algorithms')
         mean_crossing(loader.big_df)
-    elif dest in ['bumper','hard_stop']:
+    elif dest in ['bumper', 'hard_stop', 'slight_towing']:
         select_model_imbalanced(loader.research_dfa, model_names=['rf', 'ada', 'et'], features=pred_features, dest=dest)
     else:
         select_model(loader.research_dfa, model_names=['rf', 'ada', 'et'], features=pred_features, dest=dest)

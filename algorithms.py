@@ -16,10 +16,16 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import AdaBoostClassifier
+from sklearn.metrics import precision_score, recall_score
 import numpy as np
 from collections import Counter
 from utils import *
 from imblearn.over_sampling import SMOTE
+
+
+class Model_Selection:
+    def select_model(self):
+        ...
 
 def init_model(type='et', params={'estimators': 5, 'max_depth':100}):
     # initialize different models for model selection
@@ -65,7 +71,7 @@ def mean_crossing(big_df, first_level=100, second_level=10, consec_thresh=25, ax
     print('mean crossing algorithm finished')
 
 
-def select_model(data, features, model_names='', dest='towing', params={'estimators': 5}, down_smapling_factor=3):
+def select_model(data, features, model_names='', dest='towing', params={'estimators': 5}, down_smapling_factor=3,upsample=False):
     # model selection script
     # can predict for now (given the right annotation):
     # Bumpers, Hard stops, slight towing
@@ -97,9 +103,15 @@ def select_model(data, features, model_names='', dest='towing', params={'estimat
 
             score = model.score(X_val, y_val)
             results.append(score)
-        try:
-            port_model(model, f'models/{dest}/{model_names[i]}-{round(score,2)}-test.cpp') # standard model will be saved as cat_id currenlty...
 
+        model_path = ''
+        preds = model.predict(data[features])
+        #precision = round(precision_score(preds, data[dest]), 2)
+        #recall = round(recall_score(preds, data[dest]), 2)
+        try:
+            model_path = f'models/{dest}/{dest}-{model_names[i]}-{round(score,2)}-{datetime.date.today()}-test.cpp'
+            port_model(model, model_path)  # standard model will be saved as cat_id currenlty...
+            save_pickle(f'{dest}_{model_names[i]}_model.pkl', model)
         except:
             print(f'well, this model {model}-{model_names[i]} is not suitable for porting')
 
@@ -107,7 +119,8 @@ def select_model(data, features, model_names='', dest='towing', params={'estimat
         print(cm(model.predict(X_val), y_val))
         print('model', 'accuracy', 'std')
         print(model_names[i], round(np.mean(results), 3), round(np.std(results), 3))
-        write_experiment_to_log(model=model_names[i], results=round(np.mean(results), 3), dest=dest)
+        write_experiment_to_log(model=model_names[i], acc=round(np.mean(results), 3), precision='', recall='',
+                                dataset_desc=len(data), dest=dest, model_path=model_path)
 
 
 def select_model_imbalanced(data, features, model_names='', dest='towing', params={'estimators': 5}, negative_factor=1):
@@ -126,9 +139,12 @@ def select_model_imbalanced(data, features, model_names='', dest='towing', param
             model.fit(X_trn, y_trn)
 
             score = model.score(X_val, y_val)
+
             results.append(score)
 
         preds = model.predict(data[features])
+        precision = round(precision_score(preds, data[dest]), 2)
+        recall = round(recall_score(preds, data[dest]), 2)
 
         print(model_names[i], round(np.mean(results), 3), round(np.std(results), 3))
 
@@ -136,32 +152,36 @@ def select_model_imbalanced(data, features, model_names='', dest='towing', param
 
         model_path = ''
         try:
-            model_path = f'models/{dest}-{model_names[i]}-{round(score,2)}-test.cpp'
-            port_model(model, model_path) # standard model will be saved as cat_id currenlty...
+            model_path = f'models/{dest}/{dest}-{model_names[i]}-{round(score,2)}-{precision}-{recall}-{datetime.date.today()}-test.cpp'
+            port_model(model, model_path)  # standard model will be saved as cat_id currenlty...
             save_pickle(f'{dest}_{model_names[i]}_model.pkl', model)
         except:
             print(f'well, this model {model}-{model_names[i]} is not suitable for porting')
 
-        write_experiment_to_log(model=model_names[i], results=round(np.mean(results), 3), dest=dest, model_path=model_path)
+        write_experiment_to_log(model=model_names[i], acc=round(np.mean(results), 3), precision=precision,recall=recall,
+                                dataset_desc=len(data), dest=dest, model_path=model_path)
 
 
-def write_experiment_to_log(model='', dataset_desc='', settings='', results='', dest='', model_path=''):
-    # write the experiments to an experiemtn log
+def write_experiment_to_log(model='', dataset_desc='', settings='', acc='',precision='',recall='' ,dest='', model_path=''):
+    # write the experiments to an experiment log
     import hashlib
     config = json.load(codecs.open('config.json', 'r', 'utf-8-sig'))
 
     exp_df = pd.read_csv(config['experiment_log_file'], index_col=0)
-    time = datetime.datetime.now()
+    time = datetime.date.today()
     #dataset_code = hashlib.sha256(exp_df.values.tobytes()).hexdigest()
     dataset_desc = dataset_desc
-    model = model
-    settings = settings
-    results = results
+
     validity = False
     dest = 'standard' if dest == 'cat_id' else dest
-    values = [time, dataset_desc, model, settings, results, dest, model_path, validity]
-    columns = ['dt', 'dataset_desc', 'model', 'result', 'setting', 'dest', 'model_path', 'valid']
-    index = exp_df.index.max()+1 if exp_df.index.max()>=0 else 0
+    try:
+        statinfo = os.stat(model_path)
+        size = statinfo.st_size
+    except:
+        size = ''
+    values = [time, dataset_desc, model, round(acc,3), precision, recall, settings, dest, model_path, size,  validity]
+    columns = ['dt', 'dataset_desc', 'model', 'accuracy', 'precision', 'recall', 'setting', 'dest', 'model_path','size', 'valid']
+    index = exp_df.index.max()+1 if exp_df.index.max() >= 0 else 0
     ordered_df = pd.DataFrame({col: value for col, value in zip(columns, values)}, index=[index])
     exp_df = exp_df.append(ordered_df[columns])
     exp_df.to_csv(config['experiment_log_file'])
