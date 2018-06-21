@@ -39,8 +39,6 @@ def port_model(model, name="rf_from_sklearn"):
     statinfo = os.stat(name)
     print(bcolors.OKBLUE+f'model {name} saved, with size {statinfo.st_size} in bytes: '+bcolors.ENDC)
 
-# data flow 2
-
 def save_pickle(fname, obj):
     with open(fname, "wb") as output_file:
         pickle.dump(obj, output_file)
@@ -202,7 +200,7 @@ class DataLoader:
             [(self.big_df['file'] == 'Acc_Test_240418.xlsx') & (self.big_df.cat_id == 5) & (
             self.big_df.time_sec.isin(first_second_stop))] = 2
 
-    def extract_features(self, bumpers=False, hard_stops=False, moved=False, shifted=False):
+    def extract_features(self, moved=False, shifted=False):
         # handle the bumper and hardstop thing
         grouping = ['time_sec', 'file']
         print('extracting features - grouping big_df into research_dfa file')
@@ -212,10 +210,10 @@ class DataLoader:
             .join(self.big_df.groupby(grouping)[features].max(), rsuffix='_max') \
             .join(self.big_df.groupby(grouping)[features].min(), rsuffix='_min') \
             .join(self.big_df.groupby(grouping)['cat_id'].max())
-        if bumpers:
+        if self.dest == 'bumper':
             self.research_dfa = self.research_dfa.join(self.big_df.groupby('time_sec')['bumper'].max())
-        if hard_stops:
-            self.research_dfa = self.research_dfa.join(self.big_df.groupby('time_sec')['hard_stop_on'].max())
+        if self.dest =='hard_stop':
+            self.research_dfa = self.research_dfa.join(self.big_df.groupby('time_sec')['hard_stop'].max())
         if shifted or moved:
             self.research_dfa = self.research_dfa.join(self.research_dfa.shift(-1), rsuffix='_shifted')\
                 .join(self.research_dfa.shift(1), rsuffix='_moved')
@@ -317,8 +315,8 @@ class DataLoader:
 #@click.option('--dest', default='bumper', help='standard(default, drive/dirt road/zigzag), bumper, towing(standard towing,).slight_towing')
 #@click.option('--source', default='saved', help='the .csv or the excels')  #saved, excel
 
-# TODO: pay attention, saved dataset is curenlty valid for 1 day, since it is populated with current date
-def main(dest='slight_towing', source='saved'):
+def main(dest='slight_towing', source='saved', validity=True, params = {'estimators': 5, 'max_depth': 10, 'features': 48}):
+
     # I start here with the slight tow predictor
     # instructions:
     # when predicting slight towing, need to supply files with (slight) towing, and standstill
@@ -326,40 +324,33 @@ def main(dest='slight_towing', source='saved'):
     config = json.load(codecs.open('config.json', 'r', 'utf-8-sig'))
     root_dir = config['root_dir']
     f = glob.glob(root_dir + '/data/*.xlsx')
-    # f=[file for file in f if 'stand' in file]
-    # f = [file for file in f if 'stand' in file or 'Tow' in file]
 
     loader = DataLoader(dest)
-
     loader.load_data(f, source)  # test loads fewer sheets, although all Excel file is still loaded
     # files for (slight) towing 'data/Acc_Data_Tow_1605.xlsx', 'data/standStillDownHill.xlsx', 'data/standStillFlat.xlsx', 'data/standStillUphill.xlsx','data/Acc_Data_060618.xlsx'
-    # files for driving
 
-     #TODO:  consider saving after adding events
-
-    if dest == 'bumper':
-        loader.populate_events('bumper', 4)
+    loader.populate_events(dest, get_category(dest))
 
     loader.big_df.to_csv(f'saved_data/big_df_{dest}.csv')
-    bumper_state = True if dest=='bumper' else False
-    loader.extract_features(bumpers=bumper_state, moved=True, shifted=True)
+    loader.extract_features(moved=True, shifted=True)
 
     if dest == 'slight_towing':
         loader.popluate_slight_tow()  # TODO: move research_dfa out of this function
 
-    pred_features = get_pred_features(shift=True, moved=True)
-
     print(f'data distribution {Counter(loader.research_dfa.cat_id)}')
 
-    #print(f'dest distribution {Counter(loader.research_dfa[dest])}')
+    model_selection = Model_Selection(validity=validity, params=params)
+    # features: all -(48), 1 - 16
+    # print(f'dest distribution {Counter(loader.research_dfa[dest])}')
     # possible dest: bumper_, standard, slight_towing, towing
-    if dest == 'towing':  # t
+    if dest == 'towing':  #
         print('Running towing algorithms')
-        mean_crossing(loader.big_df)
+        model_selection.mean_crossing(loader.big_df)
     elif dest in ['bumper', 'hard_stop', 'slight_towing']:
-        select_model_imbalanced(loader.research_dfa, model_names=['rf', 'ada', 'et'], features=pred_features, dest=dest)
+        model_selection.select_model(loader.research_dfa, model_names=['rf', 'et'], dest=dest
+                                     , upsample=True, )
     else:
-        select_model(loader.research_dfa, model_names=['rf', 'ada', 'et'], features=pred_features, dest=dest)
+        model_selection.select_model(loader.research_dfa, model_names=['rf', 'et'], dest=dest)
 
 
 if   __name__ == '__main__':

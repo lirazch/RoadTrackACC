@@ -4,6 +4,11 @@ using libraries:
   * SKlearn, extensively
   * Detect_peaks
 
+## 21.6
+1. Models passed to dropbox folder
+2. Model names include accuracy, precision, recall, data
+3. Parameters are in model log 
+
 ## 12.6 models (models/x.cpp)
 1. Driving model
 * Used: ignition = on
