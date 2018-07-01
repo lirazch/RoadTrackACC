@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn import svm
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, KFold
-
+from xgboost import XGBClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import AdaBoostClassifier
@@ -46,6 +46,8 @@ class Model_Selection:
             model = AdaBoostClassifier(n_estimators=params['estimators'], random_state=0)
         elif type == 'rf':
             model = RandomForestClassifier(n_estimators=self.params['estimators'], max_depth=self.params['max_depth'], oob_score=True, random_state=1)
+        elif type== 'xgb':
+            model = XGBClassifier(learning_rate=0.1, n_estimators=150, max_depth=5, min_child_weight=1, gamma=0)
         else:
             model = ''
         return model
@@ -118,7 +120,6 @@ class Model_Selection:
                     X_trn, y_trn = data[pred_features].iloc[samples_train], data[dest][samples_train]
                     X_val, y_val = data[pred_features].iloc[samples_test], data[dest][samples_test]
 
-
                 model.fit(X_trn, y_trn)
 
                 score = model.score(X_val, y_val)
@@ -138,11 +139,11 @@ class Model_Selection:
             try:
                 val = 'test' if not self.validity else 'valid'
                 model_path = f'{self.models_folder}/{dest}/{dest}-{model_names[i]}-{round(score,2)}-{precision}-{recall}' \
-                             f'-{datetime.date.today()}-{val}.cpp'
+                             f'-{datetime.date.today()}-{val}'
                 port_model(model, model_path)  # standard model will be saved as cat_id currenlty...
-                save_pickle(f'{dest}_{model_names[i]}_model.pkl', model)
+                save_pickle(f'pkl_models/{dest}_{model_names[i]}_model.pkl', model)
             except:
-                print(f'well, this model {model}-{model_names[i]} is not suitable for porting')
+                print(f'well, this model {model_names[i]} is not suitable for porting')
 
             print('confusion matrix: [pred X actual]:')
             print(cm(model.predict(X_val), y_val))
@@ -156,7 +157,7 @@ class Model_Selection:
 
         exp_df = pd.read_csv(self.config['experiment_log_file'], index_col=0)
         time = datetime.date.today()
-        #dataset_code = hashlib.sha256(exp_df.values.tobytes()).hexdigest()
+
         dataset_desc = dataset_desc
 
         dest = 'standard' if dest == 'cat_id' else dest
