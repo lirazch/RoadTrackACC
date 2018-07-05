@@ -35,8 +35,8 @@ def port_model(model, name="rf_from_sklearn"):
     else:
         porter = Porter(model, language='c')
         output = porter.export(embed_data=True)
-
-        with open(name+'.cpp', "w") as text_file:
+        name = name+'.cpp'
+        with open(name, "w") as text_file:
             text_file.write(output)
 
     statinfo = os.stat(name)
@@ -87,14 +87,6 @@ def get_category(sheet_name):
     elif 'stand' in sheet_name.lower():
         return 1
 
-####################
-
-
-
-# necessary options:
-#@click.command()
-#@click.option('--dest', default='bumper', help='standard(default, drive/dirt road/zigzag), bumper, towing(standard towing,).slight_towing')
-#@click.option('--source', default='saved', help='the .csv or the excels')  #saved, excel
 
 
 

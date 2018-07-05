@@ -1,7 +1,7 @@
 
 from dataloader import *
 
-def main(dest='slight_towing', source='saved', validity=False, params = {'estimators': 5, 'max_depth': 10, 'features': 48}):
+def main(dest='bumper', source='saved', validity=False, params = {'estimators': 5, 'max_depth': 10, 'features': 48}):
 
     # I start here with the slight tow predictor
     # instructions:
